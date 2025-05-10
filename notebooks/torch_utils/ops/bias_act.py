@@ -1,4 +1,4 @@
-# Copyright (c) 2021, NVIDIA CORPORATION.  All rights reserved.
+# Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
 #
 # NVIDIA CORPORATION and its licensors retain all intellectual property
 # and proprietary rights in and to this software, related documentation
@@ -9,60 +9,45 @@
 """Custom PyTorch ops for efficient bias and activation."""
 
 import os
-import warnings
 import numpy as np
 import torch
-import traceback
+import dnnlib
 
+# from .. 
 import custom_ops
+#from .. 
 import misc
-
-class EasyDict(dict):
-    """Convenience class that behaves like a dict but allows access with the attribute syntax."""
-
-    def __getattr__(self, name: str):
-        try:
-            return self[name]
-        except KeyError:
-            raise AttributeError(name)
-
-    def __setattr__(self, name: str, value) -> None:
-        self[name] = value
-
-    def __delattr__(self, name: str) -> None:
-        del self[name]
 
 #----------------------------------------------------------------------------
 
 activation_funcs = {
-    'linear':   EasyDict(func=lambda x, **_:         x,                                          def_alpha=0,    def_gain=1,             cuda_idx=1, ref='',  has_2nd_grad=False),
-    'relu':     EasyDict(func=lambda x, **_:         torch.nn.functional.relu(x),                def_alpha=0,    def_gain=np.sqrt(2),    cuda_idx=2, ref='y', has_2nd_grad=False),
-    'lrelu':    EasyDict(func=lambda x, alpha, **_:  torch.nn.functional.leaky_relu(x, alpha),   def_alpha=0.2,  def_gain=np.sqrt(2),    cuda_idx=3, ref='y', has_2nd_grad=False),
-    'tanh':     EasyDict(func=lambda x, **_:         torch.tanh(x),                              def_alpha=0,    def_gain=1,             cuda_idx=4, ref='y', has_2nd_grad=True),
-    'sigmoid':  EasyDict(func=lambda x, **_:         torch.sigmoid(x),                           def_alpha=0,    def_gain=1,             cuda_idx=5, ref='y', has_2nd_grad=True),
-    'elu':      EasyDict(func=lambda x, **_:         torch.nn.functional.elu(x),                 def_alpha=0,    def_gain=1,             cuda_idx=6, ref='y', has_2nd_grad=True),
-    'selu':     EasyDict(func=lambda x, **_:         torch.nn.functional.selu(x),                def_alpha=0,    def_gain=1,             cuda_idx=7, ref='y', has_2nd_grad=True),
-    'softplus': EasyDict(func=lambda x, **_:         torch.nn.functional.softplus(x),            def_alpha=0,    def_gain=1,             cuda_idx=8, ref='y', has_2nd_grad=True),
-    'swish':    EasyDict(func=lambda x, **_:         torch.sigmoid(x) * x,                       def_alpha=0,    def_gain=np.sqrt(2),    cuda_idx=9, ref='x', has_2nd_grad=True),
+    'linear':   dnnlib.EasyDict(func=lambda x, **_:         x,                                          def_alpha=0,    def_gain=1,             cuda_idx=1, ref='',  has_2nd_grad=False),
+    'relu':     dnnlib.EasyDict(func=lambda x, **_:         torch.nn.functional.relu(x),                def_alpha=0,    def_gain=np.sqrt(2),    cuda_idx=2, ref='y', has_2nd_grad=False),
+    'lrelu':    dnnlib.EasyDict(func=lambda x, alpha, **_:  torch.nn.functional.leaky_relu(x, alpha),   def_alpha=0.2,  def_gain=np.sqrt(2),    cuda_idx=3, ref='y', has_2nd_grad=False),
+    'tanh':     dnnlib.EasyDict(func=lambda x, **_:         torch.tanh(x),                              def_alpha=0,    def_gain=1,             cuda_idx=4, ref='y', has_2nd_grad=True),
+    'sigmoid':  dnnlib.EasyDict(func=lambda x, **_:         torch.sigmoid(x),                           def_alpha=0,    def_gain=1,             cuda_idx=5, ref='y', has_2nd_grad=True),
+    'elu':      dnnlib.EasyDict(func=lambda x, **_:         torch.nn.functional.elu(x),                 def_alpha=0,    def_gain=1,             cuda_idx=6, ref='y', has_2nd_grad=True),
+    'selu':     dnnlib.EasyDict(func=lambda x, **_:         torch.nn.functional.selu(x),                def_alpha=0,    def_gain=1,             cuda_idx=7, ref='y', has_2nd_grad=True),
+    'softplus': dnnlib.EasyDict(func=lambda x, **_:         torch.nn.functional.softplus(x),            def_alpha=0,    def_gain=1,             cuda_idx=8, ref='y', has_2nd_grad=True),
+    'swish':    dnnlib.EasyDict(func=lambda x, **_:         torch.sigmoid(x) * x,                       def_alpha=0,    def_gain=np.sqrt(2),    cuda_idx=9, ref='x', has_2nd_grad=True),
 }
 
 #----------------------------------------------------------------------------
 
-_inited = False
 _plugin = None
 _null_tensor = torch.empty([0])
 
 def _init():
-    global _inited, _plugin
-    if not _inited:
-        _inited = True
-        sources = ['bias_act.cpp', 'bias_act.cu']
-        sources = [os.path.join(os.path.dirname(__file__), s) for s in sources]
-        try:
-            _plugin = custom_ops.get_plugin('bias_act_plugin', sources=sources, extra_cuda_cflags=['--use_fast_math'])
-        except:
-            warnings.warn('Failed to build CUDA kernels for bias_act. Falling back to slow reference implementation. Details:\n\n' + traceback.format_exc())
-    return _plugin is not None
+    global _plugin
+    if _plugin is None:
+        _plugin = custom_ops.get_plugin(
+            module_name='bias_act_plugin',
+            sources=['bias_act.cpp', 'bias_act.cu'],
+            headers=['bias_act.h'],
+            source_dir=os.path.dirname(__file__),
+            extra_cuda_cflags=['--use_fast_math', '--allow-unsupported-compiler'],
+        )
+    return True
 
 #----------------------------------------------------------------------------
 
@@ -159,7 +144,7 @@ def _bias_act_cuda(dim=1, act='linear', alpha=None, gain=None, clamp=None):
     class BiasActCuda(torch.autograd.Function):
         @staticmethod
         def forward(ctx, x, b): # pylint: disable=arguments-differ
-            ctx.memory_format = torch.channels_last if x.ndim > 2 and x.stride()[1] == 1 else torch.contiguous_format
+            ctx.memory_format = torch.channels_last if x.ndim > 2 and x.stride(1) == 1 else torch.contiguous_format
             x = x.contiguous(memory_format=ctx.memory_format)
             b = b.contiguous() if b is not None else _null_tensor
             y = x
@@ -192,7 +177,7 @@ def _bias_act_cuda(dim=1, act='linear', alpha=None, gain=None, clamp=None):
     class BiasActCudaGrad(torch.autograd.Function):
         @staticmethod
         def forward(ctx, dy, x, b, y): # pylint: disable=arguments-differ
-            ctx.memory_format = torch.channels_last if dy.ndim > 2 and dy.stride()[1] == 1 else torch.contiguous_format
+            ctx.memory_format = torch.channels_last if dy.ndim > 2 and dy.stride(1) == 1 else torch.contiguous_format
             dx = _plugin.bias_act(dy, b, x, y, _null_tensor, 1, dim, spec.cuda_idx, alpha, gain, clamp)
             ctx.save_for_backward(
                 dy if spec.has_2nd_grad else _null_tensor,
