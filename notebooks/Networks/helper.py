@@ -4,6 +4,12 @@ import warnings
 from typing import Union, Any, Optional
 import numpy as np
 
+def count_parameters(model):
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total parameters: {total:,}")
+    print(f"Trainable parameters: {trainable:,}")
+
 @contextlib.contextmanager
 def supress_tracer_warnings():
     flt  = ('ignore', None, torch.jit.TracerWarning, None, 0)
