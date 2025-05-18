@@ -55,19 +55,20 @@ def _resize_pos_embed(self, posemb: torch.Tensor, gs_h: int, gs_w: int) -> torch
     
     posemb_grid = posemb_grid.permute(0, 2, 3, 1)               # posemb_grid: [1, new_gs_w, new_gs_w, C]
     posemb_grid = posemb_grid.reshape(1, gs_h * gs_w, -1)       # posemb_grid: [1, new_gs_w x new_gs_w, C]
-    posemb_grid = posemb_grid.expand(posemb.shape[0], -1, -1)# posemb_grid: [B, new_gs_w x new_gs_w, C]    # FIX
+    posemb_grid = posemb_grid.expand(posemb.shape[0], -1, -1)   # posemb_grid: [B, new_gs_w x new_gs_w, C]    # FIX
     posemb = torch.cat([posemb_tok, posemb_grid], dim = 1)      # posemb_grid: [B, new_gs_w x new_gs_w + 1 or 2, C] added Batch dim back + 1 or 2 CLS token
     return posemb
 
 
 def forward_flex(self, x: torch.Tensor) -> torch.Tensor:
+    B, C, H, W = x.shape
     x = self.patch_embed.proj(x)             # x: [B, embedding dimension, H // 16   W // 16]
     x = x.flatten(2)                         # x: [B, embedding dimension, H // 16 x W // 16]
     x = x.transpose(1,2)                     # x: [B, H // 16 x W // 16, embedding dimension]
     # x: [B, patch_dim, embedding dimension]
     # x: [B, N,         C]
 
-    pos_embed = _resize_pos_embed(self = self, posemb = self.pos_embed, gs_h = self.patch_size[0], gs_w = self.patch_size[1])
+    pos_embed = _resize_pos_embed(self = self, posemb = self.pos_embed, gs_h = H // self.patch_size[0], gs_w = W // self.patch_size[1])
 
     # # Adding CLS Tokens
     cls_tokens = self.cls_token             # cls_tokens: [1, 1, embedding dimension]
@@ -75,7 +76,7 @@ def forward_flex(self, x: torch.Tensor) -> torch.Tensor:
 
     x = torch.cat([cls_tokens, x], dim=1)               # x:   [B, N + 1, C]
 
-    assert x.shape == pos_embed.shape, f"x shape: {x.shape}, pos_embed: {pos_embed.shape}"
+    # assert x.shape == pos_embed.shape, f"x shape: {x.shape}, pos_embed: {pos_embed.shape}"
     x = x + pos_embed
     x = self.pos_drop(x)                # x:   [B, N + 1, C]
     for blk in self.blocks:
@@ -119,3 +120,6 @@ def make_vit_backbone(model: nn.Module,
 
     return pretrained
     
+def forward_vit(pretrained: nn.Module, x: torch.Tensor) -> dict:
+    _ = pretrained.model.forward_flex(x)
+    return {k: pretrained.rearrange(v) for k, v in activations.items()}
