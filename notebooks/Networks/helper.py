@@ -3,6 +3,13 @@ import torch
 import warnings
 from typing import Union, Any, Optional
 import numpy as np
+import matplotlib.pyplot as plt
+
+def show_one(x: torch.Tensor):
+    if x.ndim == 4:
+        x = x[0]  # first batch
+    assert x.shape[0] <= 4
+    plt.imshow(x.permute(1,2,0).detach().cpu().numpy())
 
 def count_parameters(model):
     total = sum(p.numel() for p in model.parameters())
