@@ -1,0 +1,18 @@
+[
+    {
+        "filename": "cat1.jpg",
+        "label": "cat"
+    },
+    {
+        "filename": "dog1.jpg",
+        "label": "dog"
+    },
+    {
+        "filename": "cat2.jpg",
+        "label": "cat"
+    },
+    {
+        "filename": "bird1.jpg",
+        "label": "bird"
+    }
+]
