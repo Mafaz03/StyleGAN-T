@@ -5,10 +5,11 @@ from typing import Union, Any, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 
-def show_one(x: torch.Tensor):
+def show_one(x: torch.Tensor, title = None):
     if x.ndim == 4:
         x = x[0]  # first batch
     assert x.shape[0] <= 4
+    if title: plt.title(title)
     plt.imshow(x.permute(1,2,0).detach().cpu().numpy())
 
 def count_parameters(model):
