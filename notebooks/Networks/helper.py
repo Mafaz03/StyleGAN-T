@@ -4,6 +4,8 @@ import warnings
 from typing import Union, Any, Optional
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import ImageGrid
+import matplotlib.pyplot as plt
 
 def show_one(x: torch.Tensor, title = None):
     if x.ndim == 4:
@@ -55,5 +57,35 @@ def normalise_2nd_moment(x: torch.Tensor, dim: int = 1, eps: float = 1e-8):
     a = a.rsqrt()
     a = x * a
     return x
+
+def save_image_grid(dl, name = "sample.png", num_grid = 2, px = 600, has_labels = True):
+    if has_labels:
+        images, labels = next(iter(dl))
+    else: images = next(iter(dl))
+
+    fig = plt.figure(figsize=(px/100, px/100))
+    grid = ImageGrid(fig, 111,
+                    nrows_ncols=(num_grid, num_grid),
+                    axes_pad=0.3,
+                    )
+    if has_labels:
+        for ax, img, label in zip(grid, images, labels):
+            img_np = img.detach().cpu().permute(1, 2, 0).numpy()
+
+            ax.imshow(img_np)
+            ax.axis("off")
+            ax.set_title(label)
+    else:
+        for ax, img in zip(grid, images):
+            img_np = img.detach().cpu().permute(1, 2, 0).numpy()
+
+            ax.imshow(img_np)
+            ax.axis("off")
+
+    for ax in grid[len(images):]:
+        ax.axis("off")
+
+    plt.tight_layout()
+    plt.savefig(name)
 
 
