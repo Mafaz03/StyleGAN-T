@@ -1,11 +1,12 @@
 import contextlib
 import torch
 import warnings
-from typing import Union, Any, Optional
+from typing import Union, Any, Optional, List, Iterator
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import ImageGrid
 import matplotlib.pyplot as plt
+from torch import nn
 
 def show_one(x: torch.Tensor, title = None):
     if x.ndim == 4:
@@ -88,4 +89,34 @@ def save_image_grid(dl, name = "sample.png", num_grid = 2, px = 600, has_labels 
     plt.tight_layout()
     plt.savefig(name)
 
+def split(arr: Union[List, np.ndarray, torch.Tensor], chunk_size: int, dim: int = 0):
+    splits = (len(arr) / chunk_size)
+    return np.split(arr, splits, dim)
 
+def fetch_data(training_set_iterator: Iterator, batch_size: int, z_dim: int, device: torch.device):
+    real_images, real_labels = next(training_set_iterator)
+    real_images = (real_images/(255/2)) - 1           # normalizing images from [-1, 1]
+    gen_zs = torch.randn([batch_size, z_dim], device=device)
+    
+    return real_images, real_labels, gen_zs
+
+
+def partial_freeze(gen_or_disc: nn.Module) -> None:
+    phase = gen_or_disc.name
+
+    if phase == "G":
+
+        trainable_layers = gen_or_disc.trainable_layers
+        # Freeze all layers first
+        gen_or_disc.requires_grad_(False)
+
+        # Then selectively unfreeze based on substring match
+        for name, layer in gen_or_disc.named_modules():
+            should_train = any(layer_type in name for layer_type in trainable_layers)
+            layer.requires_grad_(should_train)
+    
+    elif phase == "D":
+        gen_or_disc.dino.requires_grad_(False)
+    
+    else: raise NotImplemented
+    

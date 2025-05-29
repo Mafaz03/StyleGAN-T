@@ -135,7 +135,7 @@ class ProjectedGANLoss:
                     "Discriminator Score for Real Images": round(real_images_loss.item(),4),
                     "Discriminator Total Loss"           : round(fake_images_loss.item() + real_images_loss.item(),4)
                 }
-                if verbose: print(training_stats)
+    
 
             elif phase == "G":
                 gen_img          = self.run_Generator(gen_z, c_raw)
@@ -163,5 +163,5 @@ class ProjectedGANLoss:
                 }
                 if self.clip_weight > 0:
                     self.training_stats["Clip Loss"] = clip_loss.item()
-                if verbose: print(training_stats)
+            if verbose: print(training_stats)
             
