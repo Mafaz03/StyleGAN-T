@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from shared import FullyConnectedLayers, MLP
-from clip import CLIP
+from clip_model import CLIP_model
 
 import sys
 import os
@@ -21,6 +21,17 @@ import conv2d_resample
 import upfirdn2d
 import bias_act
 import fma
+
+
+bias_def_gain = {"linear": 1,
+ "relu": 1.4142135623730951,
+ "lrelu": 1.4142135623730951,
+ "tanh": 1,
+ "sigmoid": 1,
+ "elu": 1,
+ "selu": 1,
+ "softplus": 1,
+ "swish": "1.4142135623730951"}
 
 
 def modulated_conv2d(x: torch.Tensor, weight: torch.Tensor, styles: torch.Tensor, noise: Optional[torch.Tensor] = None,
@@ -551,11 +562,11 @@ class MappingNetwork(nn.Module):
                        lr_multiplier=lr_multiplier, 
                        linear_out=True)
         if conditional:
-            self.clip = CLIP()
-            del self.clip.model.visual # only using the text encoder
+            self.clip = CLIP_model()
+            # del self.clip.model.visual # only using the text encoder
             self.c_dim = self.clip.txt_dim
         else:
-            self.cdim = 0
+            self.c_dim = 0
         
         self.w_dim = self.c_dim + self.z_dim
         self.register_buffer('x_avg', torch.zeros([self.z_dim]))
@@ -579,7 +590,7 @@ class MappingNetwork(nn.Module):
         # Build latent
         if len(c) >- 1:
             assert c is not None
-            c = self.clip.encode_text(c) if is_list_of_str(c) else c
+            c = self.clip.encode_texts(c) if is_list_of_str(c) else c
             w = torch.cat([x, c], dim=1)                  # w: [B, z_dim + 768]
         else:
             w = x
